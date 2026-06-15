@@ -105,6 +105,23 @@ cd agentmine
 pip install -e .
 ```
 
+### 导出日志（一行代码）
+
+```python
+# LangChain
+from agentmine.integrations.langchain_callback import AgentMineCallback
+agent = create_agent(..., callbacks=[AgentMineCallback("logs.jsonl")])
+
+# LlamaIndex
+from agentmine.integrations.llamaindex_observer import AgentMineObserver
+Settings.callback_manager = CallbackManager([AgentMineObserver("logs.jsonl")])
+
+# 任何框架
+from agentmine.integrations.langchain_callback import AgentMineLogger
+logger = AgentMineLogger("logs.jsonl")
+logger.log(query="用户问题", output="Agent回复", error=None)
+```
+
 ### 基本用法
 
 ```bash
