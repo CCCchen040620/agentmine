@@ -77,9 +77,9 @@ class TraceEmbedder:
         logger.info(f"Embedding {len(texts)} traces...")
         embeddings = self.model.encode(
             texts,
-            show_progress_bar=True,
+            show_progress_bar=len(texts) > 100,  # 仅大批量显示进度条
             batch_size=32,
-            normalize_embeddings=True,  # 余弦相似度，归一化
+            normalize_embeddings=True,
         )
 
         logger.info(f"Embeddings shape: {embeddings.shape}")

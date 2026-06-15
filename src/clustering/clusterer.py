@@ -100,8 +100,12 @@ class FailureClusterer:
         logger.info(f"Clustering {n} traces (dim={embeddings.shape[1]})")
 
         # ── Step 1: UMAP 降维预处理（可选） ──────────────────
-        if self.use_umap_reduce and embeddings.shape[1] > 32:
+        # UMAP 降维要求: n_components < n_samples
+        if self.use_umap_reduce and embeddings.shape[1] > 32 and embeddings.shape[0] > self.umap_n_components + 2:
             reduced = self._umap_reduce(embeddings)
+        elif self.use_umap_reduce:
+            logger.info(f"Skipping UMAP reduce: {embeddings.shape[0]} samples < {self.umap_n_components} components")
+            reduced = embeddings
         else:
             reduced = embeddings
 
