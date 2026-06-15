@@ -45,3 +45,4 @@ htmlcov/
 
 # Demo outputs
 examples/demo_agent_logs.jsonl
+agentmine_demo/
