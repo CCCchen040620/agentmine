@@ -453,60 +453,57 @@ async def api_demo(traces: int = 200, min_cluster_size: int = 5):
     # 生成演示数据
     demo_file = generate_demo_data(n_traces=traces, output_dir=tempfile.gettempdir())
 
-    # 分析
-    parser = LogParser()
-    all_traces = parser.parse_file(demo_file)
+    try:
+        # 分析
+        parser = LogParser()
+        all_traces = parser.parse_file(demo_file)
 
-    labeler = AutoLabeler()
-    all_traces = labeler.label(all_traces)
+        labeler = AutoLabeler()
+        all_traces = labeler.label(all_traces)
 
-    failures = [t for t in all_traces if t.status.value == "failure"]
+        failures = [t for t in all_traces if t.status.value == "failure"]
 
-    embedder = TraceEmbedder()
-    embeddings = embedder.embed(failures)
+        embedder = TraceEmbedder()
+        embeddings = embedder.embed(failures)
 
-    clusterer = FailureClusterer(min_cluster_size=min_cluster_size)
-    result = clusterer.cluster(failures, embeddings)
+        clusterer = FailureClusterer(min_cluster_size=min_cluster_size)
+        result = clusterer.cluster(failures, embeddings)
 
-    # 规则标注簇标签
-    for cluster in result.clusters:
-        keywords = ", ".join(cluster.keywords[:3]) if cluster.keywords else "unknown"
-        cluster.label = f"{keywords}相关失败"
+        # 规则标注簇标签
+        for cluster in result.clusters:
+            keywords = ", ".join(cluster.keywords[:3]) if cluster.keywords else "unknown"
+            cluster.label = f"{keywords}相关失败"
 
-    # 生成报告
-    report_gen = HTMLReportGenerator()
-    report_path = report_gen.generate(
-        clustering_result=result,
-        all_traces=all_traces,
-        failures=failures,
-        output_path=tempfile.mktemp(suffix=".html"),
-    )
-    report_html = Path(report_path).read_text(encoding="utf-8")
+        # 生成报告
+        report_gen = HTMLReportGenerator()
+        report_path = report_gen.generate(
+            clustering_result=result,
+            all_traces=all_traces,
+            failures=failures,
+            output_path=tempfile.mktemp(suffix=".html"),
+        )
+        report_html = Path(report_path).read_text(encoding="utf-8")
 
-    clusters_json = []
-    for cluster in result.clusters:
-        clusters_json.append({
-            "id": cluster.cluster_id,
-            "label": cluster.label,
-            "size": cluster.size,
-            "percentage": cluster.percentage,
-            "keywords": cluster.keywords,
-            "sample_queries": [t.user_query[:100] for t in cluster.sample_traces[:3]],
-            "canary_queries": cluster.canary_queries[:5],
-        })
+        clusters_json = []
+        for cluster in result.clusters:
+            clusters_json.append({
+                "id": cluster.cluster_id,
+                "label": cluster.label,
+                "size": cluster.size,
+                "percentage": cluster.percentage,
+                "keywords": cluster.keywords,
+                "sample_queries": [t.user_query[:100] for t in cluster.sample_traces[:3]],
+                "canary_queries": cluster.canary_queries[:5],
+            })
 
-    return {
-        "total_traces": len(all_traces),
-        "failure_count": len(failures),
-        "failure_rate": round(len(failures) / max(len(all_traces), 1) * 100, 1),
-        "cluster_count": len(result.clusters),
-        "noise_count": result.noise_count,
-        "clusters": clusters_json,
-        "report_html": report_html,
-    }
-
+        return {
+            "total_traces": len(all_traces),
+            "failure_count": len(failures),
+            "failure_rate": round(len(failures) / max(len(all_traces), 1) * 100, 1),
+            "cluster_count": len(result.clusters),
+            "noise_count": result.noise_count,
+            "clusters": clusters_json,
+            "report_html": report_html,
+        }
     finally:
-        try:
-            os.unlink(demo_file)
-        except Exception:
-            pass
+        os.unlink(demo_file)
