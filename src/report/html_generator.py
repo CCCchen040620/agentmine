@@ -98,6 +98,114 @@ class HTMLReportGenerator:
         logger.info(f"HTML report generated: {output_file} ({len(html)} bytes)")
         return str(output_file.absolute())
 
+    def generate_diff(self, diff_result, output_path: str = "agentmine_diff") -> str:
+        """生成版本对比 HTML 报告"""
+        if not output_path.endswith(".html"):
+            output_path = output_path.rstrip("/") + ".html"
+
+        # 构建 diff 卡片
+        cards = []
+        for e in diff_result.entries:
+            if e.change_type == "new":
+                border = "4px solid #f85149"
+                badge = '<span class="card-badge badge-high">NEW ⚠️</span>'
+                v1_str = "—"
+                v2_str = f'<span style="color:#f85149;font-weight:bold;">{e.v2_size}</span>'
+                trend = f'<span style="color:#f85149;">+100%</span>'
+            elif e.change_type == "fixed":
+                border = "4px solid #3fb950"
+                badge = '<span class="card-badge badge-low">✅ FIXED</span>'
+                v1_str = f'<span style="color:#f85149;">{e.v1_size}</span>'
+                v2_str = "—"
+                trend = '<span style="color:#3fb950;">已修复</span>'
+            elif e.change_type == "worsened":
+                border = "4px solid #d2991d"
+                badge = f'<span class="card-badge badge-medium">📈 +{e.change_pct}%</span>'
+                v1_str = str(e.v1_size)
+                v2_str = f'<span style="color:#d2991d;font-weight:bold;">{e.v2_size}</span>'
+                trend = f'<span style="color:#d2991d;">+{e.change_pct}%</span>'
+            elif e.change_type == "improved":
+                border = "4px solid #58a6ff"
+                badge = f'<span class="card-badge" style="background:rgba(88,166,255,0.15);color:#58a6ff;">📉 {e.change_pct}%</span>'
+                v1_str = str(e.v1_size)
+                v2_str = str(e.v2_size)
+                trend = f'<span style="color:#58a6ff;">{e.change_pct}%</span>'
+            else:
+                border = "4px solid #30363d"
+                badge = '<span class="card-badge" style="background:rgba(139,148,158,0.15);color:#8b949e;">➖ STABLE</span>'
+                v1_str = str(e.v1_size)
+                v2_str = str(e.v2_size)
+                trend = f'<span style="color:#8b949e;">{e.change_pct}%</span>'
+
+            kw_html = " ".join(
+                f'<span class="canary-chip" style="font-size:0.75rem;">{kw}</span>'
+                for kw in (e.keywords or [])[:5]
+            )
+
+            cards.append(f"""
+            <div class="cluster-card" style="border-left:{border};">
+                <div class="card-header">
+                    <h3>{e.label}</h3>
+                    {badge}
+                </div>
+                <div class="card-body">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;text-align:center;margin-bottom:1rem;">
+                        <div>
+                            <div style="color:#8b949e;font-size:0.8rem;">V1 (基线)</div>
+                            <div style="font-size:1.5rem;font-weight:700;">{v1_str}</div>
+                        </div>
+                        <div>
+                            <div style="color:#8b949e;font-size:0.8rem;">V2 (新版本)</div>
+                            <div style="font-size:1.5rem;font-weight:700;">{v2_str}</div>
+                        </div>
+                        <div>
+                            <div style="color:#8b949e;font-size:0.8rem;">变化</div>
+                            <div style="font-size:1.2rem;font-weight:700;">{trend}</div>
+                        </div>
+                    </div>
+                    {f'<div style="margin-top:0.5rem;">{kw_html}</div>' if kw_html else ''}
+                </div>
+            </div>""")
+
+        # 统计概览
+        rate_change = diff_result.v2_failure_rate - diff_result.v1_failure_rate
+        if rate_change <= 0:
+            rate_html = f'<div class="value" style="color:#3fb950;">📉 {abs(rate_change):.1f}%</div><div class="label">失败率下降</div>'
+        else:
+            rate_html = f'<div class="value" style="color:#f85149;">📈 +{rate_change:.1f}%</div><div class="label">失败率上升</div>'
+
+        stats_html = f"""
+        <div class="stat-card"><div class="value">{diff_result.v1_failure_rate}%</div><div class="label">V1 失败率</div></div>
+        <div class="stat-card"><div class="value">{diff_result.v2_failure_rate}%</div><div class="label">V2 失败率</div></div>
+        <div class="stat-card">{rate_html}</div>
+        <div class="stat-card failure"><div class="value">{diff_result.new_failure_modes}</div><div class="label">新增失败 ⚠️</div></div>
+        <div class="stat-card success"><div class="value">{diff_result.fixed_failure_modes}</div><div class="label">已修复 ✅</div></div>
+        <div class="stat-card clusters"><div class="value">{diff_result.worsened_modes}</div><div class="label">恶化 📈</div></div>
+        <div class="stat-card"><div class="value">{diff_result.improved_modes}</div><div class="label">改善 📉</div></div>
+        """
+
+        html = _DIFF_HTML_SHELL
+        html = html.replace("__GENERATED_AT__", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        html = html.replace("__STATS_HTML__", stats_html)
+        html = html.replace("__CARDS_HTML__", "\n".join(cards))
+        html = html.replace("__V1_FAILURES__", str(diff_result.v1_failures))
+        html = html.replace("__V1_TOTAL__", str(diff_result.v1_total))
+        html = html.replace("__V1_RATE__", str(diff_result.v1_failure_rate))
+        html = html.replace("__V1_CLUSTERS__", str(diff_result.v1_clusters))
+        html = html.replace("__V2_FAILURES__", str(diff_result.v2_failures))
+        html = html.replace("__V2_TOTAL__", str(diff_result.v2_total))
+        html = html.replace("__V2_RATE__", str(diff_result.v2_failure_rate))
+        html = html.replace("__V2_CLUSTERS__", str(diff_result.v2_clusters))
+        html = html.replace("__NEW_MODES__", str(diff_result.new_failure_modes))
+        html = html.replace("__FIXED_MODES__", str(diff_result.fixed_failure_modes))
+
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text(html, encoding="utf-8")
+
+        logger.info(f"Diff HTML report generated: {output_file}")
+        return str(output_file.absolute())
+
     def _build_cluster_cards(self, result: ClusteringResult) -> str:
         """Python 构建集群卡片 HTML"""
         cards = []
@@ -369,5 +477,97 @@ Plotly.newPlot('bar-plot', [{
     margin: { l: 50, r: 40, t: 20, b: 100 }
 });
 </script>
+</body>
+</html>"""
+
+
+# ── Diff 报告模板 ─────────────────────────────────────────
+
+_DIFF_HTML_SHELL = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentMine — Version Diff Report</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0d1117; color: #c9d1d9; line-height: 1.6;
+}
+.container { max-width: 1000px; margin: 0 auto; padding: 2rem; }
+.header { text-align: center; padding: 3rem 0; border-bottom: 1px solid #21262d; margin-bottom: 2rem; }
+.header h1 { font-size: 2.5rem; color: #58a6ff; margin-bottom: 0.5rem; }
+.header .subtitle { color: #8b949e; font-size: 1.1rem; }
+.header .meta { color: #484f58; font-size: 0.85rem; margin-top: 1rem; }
+
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; margin-bottom: 2rem; }
+.stat-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 1.2rem; text-align: center; }
+.stat-card .value { font-size: 1.6rem; font-weight: 700; color: #58a6ff; }
+.stat-card .label { color: #8b949e; font-size: 0.75rem; margin-top: 0.25rem; }
+.stat-card.failure .value { color: #f85149; }
+.stat-card.success .value { color: #3fb950; }
+.stat-card.clusters .value { color: #d2991d; }
+
+.version-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+.version-box {
+    background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 1.5rem; text-align: center;
+}
+.version-box.v1 { border-color: #484f58; }
+.version-box.v2 { border-color: #58a6ff; }
+.version-box h3 { color: #e6edf3; margin-bottom: 0.75rem; }
+.version-box .rate { font-size: 2.5rem; font-weight: 800; margin-bottom: 0.25rem; }
+.version-box.v1 .rate { color: #8b949e; }
+.version-box.v2 .rate { color: #58a6ff; }
+.version-box .detail { color: #8b949e; font-size: 0.85rem; }
+
+.cluster-cards { display: grid; gap: 1rem; margin-bottom: 2rem; }
+.cluster-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; overflow: hidden; }
+.card-header { padding: 1rem 1.25rem; background: #1c2128; border-bottom: 1px solid #21262d; display: flex; justify-content: space-between; align-items: center; }
+.card-header h3 { font-size: 1rem; color: #e6edf3; }
+.card-badge { padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+.badge-high { background: rgba(248,81,73,0.15); color: #f85149; }
+.badge-medium { background: rgba(210,153,29,0.15); color: #d2991d; }
+.badge-low { background: rgba(63,185,80,0.15); color: #3fb950; }
+
+.card-body { padding: 1.25rem; }
+.canary-chip { display: inline-block; background: rgba(88,166,255,0.1); border: 1px solid rgba(88,166,255,0.2); border-radius: 14px; padding: 0.2rem 0.6rem; font-size: 0.75rem; color: #58a6ff; margin: 0.15rem; }
+
+.footer { text-align: center; padding: 2rem; color: #484f58; font-size: 0.8rem; border-top: 1px solid #21262d; margin-top: 2rem; }
+@media (max-width: 768px) { .container { padding: 1rem; } .header h1 { font-size: 1.8rem; } .version-compare { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+    <div class="header">
+        <h1>🔄 AgentMine Diff</h1>
+        <div class="subtitle">Agent 版本对比报告</div>
+        <div class="meta">Generated: __GENERATED_AT__</div>
+    </div>
+
+    <div class="version-compare">
+        <div class="version-box v1">
+            <h3>📦 V1 (基线)</h3>
+            <div class="rate">__V1_RATE__%</div>
+            <div class="detail">__V1_FAILURES__ / __V1_TOTAL__ traces · __V1_CLUSTERS__ clusters</div>
+        </div>
+        <div class="version-box v2">
+            <h3>🚀 V2 (新版本)</h3>
+            <div class="rate">__V2_RATE__%</div>
+            <div class="detail">__V2_FAILURES__ / __V2_TOTAL__ traces · __V2_CLUSTERS__ clusters</div>
+        </div>
+    </div>
+
+    <div class="stats-grid">__STATS_HTML__</div>
+
+    <h2 style="color: #58a6ff; margin-bottom: 1rem; font-size: 1.2rem;">📊 失败模式变化</h2>
+    <div class="cluster-cards">__CARDS_HTML__</div>
+
+    <div class="footer">
+        Generated by <strong>AgentMine</strong> v0.1.0 ·
+        <a href="https://github.com/CCCchen040620/agentmine" style="color: #58a6ff;">GitHub</a>
+    </div>
+</div>
 </body>
 </html>"""
