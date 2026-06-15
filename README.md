@@ -30,6 +30,10 @@
 
 ## 🎬 30 秒演示
 
+<p align="center">
+  <img src="docs/demo.gif" alt="AgentMine CLI Demo" width="800">
+</p>
+
 ```bash
 $ agentmine analyze agent_logs.jsonl
 
