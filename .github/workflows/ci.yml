@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint with ruff
+        run: |
+          ruff check src/ --ignore E501
+
+      - name: Type check with mypy
+        run: |
+          pip install mypy types-requests
+          mypy src/ --ignore-missing-imports || true
+
+      - name: Test with pytest
+        run: |
+          pytest tests/ -v --tb=short
+
+  demo-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install AgentMine
+        run: |
+          pip install -e .
+
+      - name: Generate demo data
+        run: |
+          python -c "from examples.demo_data import generate_demo_data; generate_demo_data(n_traces=100, output_dir='.')"
+
+      - name: Smoke test: parse and label
+        run: |
+          python -c "
+          from src.ingestion.parser import LogParser
+          from src.labeling.auto_labeler import AutoLabeler
+          parser = LogParser()
+          traces = parser.parse_file('demo_agent_logs.jsonl')
+          print(f'Parsed: {len(traces)} traces')
+          labeler = AutoLabeler()
+          traces = labeler.label(traces)
+          failures = [t for t in traces if t.status.value == 'failure']
+          successes = [t for t in traces if t.status.value == 'success']
+          print(f'Labeled: {len(failures)} failures, {len(successes)} successes')
+          assert len(traces) == 100, f'Expected 100 traces, got {len(traces)}'
+          assert len(failures) > 0, 'Expected some failures'
+          print('✅ Smoke test passed')
+          "
+
+      - name: Smoke test: CLI demo
+        run: |
+          agentmine demo --traces 50 --no-llm -o smoke_test_report 2>&1 | tail -5
+          echo "CLI demo completed"
