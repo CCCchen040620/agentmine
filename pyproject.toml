@@ -9,7 +9,7 @@ description = "AI Agent Failure Pattern Miner — Automatically discover systemi
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "Your Name", email = "your@email.com"}
+    {name = "CCCchen040620", email = "2627559658@qq.com"}
 ]
 keywords = [
     "ai-agent", "llm", "agent-debugging", "failure-analysis",
@@ -60,9 +60,9 @@ all = [
 agentmine = "src.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/agentmine"
-Repository = "https://github.com/yourusername/agentmine"
-Issues = "https://github.com/yourusername/agentmine/issues"
+Homepage = "https://github.com/CCCchen040620/agentmine"
+Repository = "https://github.com/CCCchen040620/agentmine"
+Issues = "https://github.com/CCCchen040620/agentmine/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

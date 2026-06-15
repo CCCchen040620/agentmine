@@ -5,7 +5,7 @@ Thanks for your interest in contributing! 🎉
 ## Quick Start
 
 ```bash
-git clone https://github.com/yourusername/agentmine.git
+git clone https://github.com/CCCchen040620/agentmine.git
 cd agentmine
 pip install -e ".[dev]"
 ```

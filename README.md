@@ -96,7 +96,7 @@ $ agentmine analyze agent_logs.jsonl
 pip install agentmine
 
 # 或从源码安装
-git clone https://github.com/yourusername/agentmine.git
+git clone https://github.com/CCCchen040620/agentmine.git
 cd agentmine
 pip install -e .
 ```

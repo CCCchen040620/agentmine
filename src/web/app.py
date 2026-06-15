@@ -312,7 +312,7 @@ body {
     </div>
 
     <div class="footer">
-        AgentMine v0.1.0 · Open Source on <a href="https://github.com/yourusername/agentmine" style="color: #58a6ff;">GitHub</a>
+        AgentMine v0.1.0 · Open Source on <a href="https://github.com/CCCchen040620/agentmine" style="color: #58a6ff;">GitHub</a>
     </div>
 </div>
 
