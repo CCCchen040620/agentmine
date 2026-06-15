@@ -84,9 +84,10 @@ def main():
 @click.option("--llm/--no-llm", default=False, help="使用 LLM 做深度根因分析（需配置 API Key）")
 @click.option("--model", default=None, help="LLM 模型名称 (如 gpt-4o, claude-sonnet-4-6)")
 @click.option("--min-cluster-size", default=5, help="最小簇大小 (默认 5)")
+@click.option("--trend/--no-trend", default=True, help="启用时序趋势分析（默认开启）")
 @click.option("--open", "open_browser", is_flag=True, default=True, help="生成后自动打开浏览器")
 def analyze(log_file: str, output: str, llm: bool, model: Optional[str],
-            min_cluster_size: int, open_browser: bool):
+            min_cluster_size: int, trend: bool, open_browser: bool):
     """
     分析 Agent 日志，挖掘失败模式
 
@@ -278,7 +279,37 @@ def analyze(log_file: str, output: str, llm: bool, model: Optional[str],
         if cluster.summary:
             console.print(f"  [dim]Cluster {cluster.cluster_id}:[/dim] {cluster.summary}")
 
-    # ── Step 7: 生成 HTML 报告 ────────────────────────────
+    # ── Step 7: 时序趋势分析 ────────────────────────────
+    trend_data = None
+    if trend:
+        console.print(Rule("[bold]📈 时序趋势[/bold]", style="dim"))
+        from src.analysis.trend import TrendAnalyzer
+        trend_analyzer = TrendAnalyzer(granularity="day")
+        trend_data = trend_analyzer.analyze(traces, failures)
+
+        if trend_data["data_points"]:
+            direction = trend_data["trend_direction"]
+            if direction == "up":
+                dir_icon, dir_color = "📈", "red"
+                dir_text = "上升"
+            elif direction == "down":
+                dir_icon, dir_color = "📉", "green"
+                dir_text = "下降"
+            else:
+                dir_icon, dir_color = "➖", "dim"
+                dir_text = "平稳"
+
+            console.print(f"  {dir_icon} 趋势: [{dir_color}]{dir_text}[/{dir_color}]  "
+                          f"([dim]{len(trend_data['data_points'])} 个数据点[/dim])")
+            if trend_data["anomalies"]:
+                console.print(f"  ⚠️  [yellow]{len(trend_data['anomalies'])} 个异常点[/yellow]:")
+                for a in trend_data["anomalies"][:5]:
+                    console.print(f"     {a['date']}: [bold]{a['rate']}%[/bold] "
+                                  f"({'异常升高' if a['direction'] == 'spike' else '异常降低'})")
+        else:
+            console.print("  [dim]无时间戳数据，跳过[/dim]")
+
+    # ── Step 8: 生成 HTML 报告 ────────────────────────────
     console.print(Rule("[bold]📄 报告生成[/bold]", style="dim"))
 
     from src.report.html_generator import HTMLReportGenerator
@@ -295,6 +326,7 @@ def analyze(log_file: str, output: str, llm: bool, model: Optional[str],
             all_traces=traces,
             failures=failures,
             output_path=output,
+            trend_data=trend_data,
         )
 
     console.print(f"  [green]✓[/green] 报告已生成: [bold bright_cyan]{report_path}[/bold bright_cyan]")

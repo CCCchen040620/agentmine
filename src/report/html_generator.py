@@ -23,16 +23,9 @@ class HTMLReportGenerator:
         all_traces: List[AgentTrace],
         failures: List[AgentTrace],
         output_path: str = "agentmine_report",
+        trend_data: dict = None,
     ) -> str:
-        """
-        Args:
-            clustering_result: 聚类结果
-            all_traces: 所有 traces
-            failures: 失败 traces
-            output_path: 输出文件路径
-        Returns:
-            生成的 HTML 文件路径
-        """
+        """生成 HTML 报告。trend_data 可选，来自 TrendAnalyzer.analyze()。"""
         if not output_path.endswith(".html"):
             output_path = output_path.rstrip("/") + ".html"
 
@@ -77,6 +70,69 @@ class HTMLReportGenerator:
         # ── 构建散点图数据 ────────────────────────────────
         scatter_json = self._build_scatter_data(clustering_result, failures)
 
+        # ── 构建趋势图数据 ────────────────────────────────
+        trend_json = "null"
+        trend_section_html = ""
+        if trend_data and trend_data.get("data_points"):
+            trend_json = json.dumps(trend_data["data_points"], ensure_ascii=False)
+            anomalies_json = json.dumps(trend_data.get("anomalies", []), ensure_ascii=False)
+            direction = trend_data.get("trend_direction", "stable")
+            trend_section_html = f"""
+            <div class="viz-section">
+                <h2>📈 失败率趋势 ({trend_data.get('granularity', 'day')})</h2>
+                <div id="trend-plot" style="width:100%;height:350px;"></div>
+            </div>
+            <script>
+            (function() {{
+                var trendData = {trend_json};
+                var anomalies = {anomalies_json};
+                var anomalyDates = new Set(anomalies.map(function(a) {{ return a.date; }}));
+                var anomalyRates = {{}};
+                anomalies.forEach(function(a) {{ anomalyRates[a.date] = a.rate; }});
+
+                var dates = trendData.map(function(d) {{ return d.date; }});
+                var rates = trendData.map(function(d) {{ return d.rate; }});
+                var totals = trendData.map(function(d) {{ return d.total; }});
+
+                var normalX = [], normalY = [], normalText = [];
+                var anomalyX = [], anomalyY = [], anomalyText = [];
+                dates.forEach(function(d, i) {{
+                    if (anomalyDates.has(d)) {{
+                        anomalyX.push(d); anomalyY.push(rates[i]);
+                        anomalyText.push(d + ': ' + rates[i] + '% (' + totals[i] + ' traces) ⚠️');
+                    }} else {{
+                        normalX.push(d); normalY.push(rates[i]);
+                        normalText.push(d + ': ' + rates[i] + '% (' + totals[i] + ' traces)');
+                    }}
+                }});
+
+                var traces = [];
+                if (normalX.length) traces.push({{
+                    x: normalX, y: normalY, text: normalText,
+                    mode: 'lines+markers', type: 'scatter', name: 'Failure Rate',
+                    line: {{ color: '#58a6ff', width: 2 }},
+                    marker: {{ size: 5, color: '#58a6ff' }},
+                    hovertemplate: '%{{text}}<extra></extra>'
+                }});
+                if (anomalyX.length) traces.push({{
+                    x: anomalyX, y: anomalyY, text: anomalyText,
+                    mode: 'markers', type: 'scatter', name: '⚠️ Anomaly',
+                    marker: {{ size: 12, color: '#f85149', symbol: 'x' }},
+                    hovertemplate: '%{{text}}<extra></extra>'
+                }});
+
+                Plotly.newPlot('trend-plot', traces, {{
+                    plot_bgcolor: '#0d1117', paper_bgcolor: '#0d1117',
+                    font: {{ color: '#c9d1d9' }},
+                    xaxis: {{ gridcolor: '#21262d', title: '' }},
+                    yaxis: {{ gridcolor: '#21262d', title: 'Failure Rate (%)' }},
+                    legend: {{ x: 0.01, y: 0.99 }},
+                    hovermode: 'closest',
+                    margin: {{ l: 50, r: 30, t: 20, b: 60 }}
+                }});
+            }})();
+            </script>"""
+
         # ── 组装完整 HTML ─────────────────────────────────
         html = self._build_full_html(
             generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -89,6 +145,7 @@ class HTMLReportGenerator:
             clusters_json=clusters_json,
             clusters_html=clusters_html,
             scatter_json=scatter_json,
+            trend_section_html=trend_section_html,
         )
 
         output_file = Path(output_path)
@@ -412,6 +469,8 @@ body {
         <h2>📊 Failure Clusters (UMAP 2D)</h2>
         <div id="cluster-plot"></div>
     </div>
+
+    __TREND_SECTION_HTML__
 
     <div class="viz-section">
         <h2>📈 Failure Distribution</h2>
